@@ -22,7 +22,7 @@ export function createErrorResponse(
   error: unknown,
   context?: ErrorContext,
 ): NextResponse<ApiResponse> {
-  // Log the error with context
+  // Log the error with context and stack trace
   logger.apiError(
     context?.method || 'UNKNOWN',
     context?.endpoint || 'UNKNOWN',
@@ -30,6 +30,7 @@ export function createErrorResponse(
     {
       userId: context?.userId,
     },
+    true, // Include stack trace for error logging
   );
 
   // Handle known AppError instances

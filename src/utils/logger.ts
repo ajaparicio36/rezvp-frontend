@@ -45,23 +45,35 @@ class Logger {
     message: string,
     data?: string, // Note: Pass JSON as string - use JSON.stringify() for objects
     context?: LogContext,
+    includeStack?: boolean,
   ) {
     if (!this.shouldLog(level)) return;
 
     const formattedMessage = this.formatMessage(level, message, context);
+    const logData = data || '';
 
     switch (level) {
       case 'error':
-        console.error(formattedMessage, data || '');
+        console.error(formattedMessage, logData);
+        if (includeStack && data) {
+          try {
+            const parsedData = JSON.parse(data);
+            if (parsedData.stack) {
+              console.error('Stack trace:', parsedData.stack);
+            }
+          } catch {
+            // Ignore parsing errors
+          }
+        }
         break;
       case 'warn':
-        console.warn(formattedMessage, data || '');
+        console.warn(formattedMessage, logData);
         break;
       case 'info':
-        console.info(formattedMessage, data || '');
+        console.info(formattedMessage, logData);
         break;
       case 'debug':
-        console.debug(formattedMessage, data || '');
+        console.debug(formattedMessage, logData);
         break;
     }
   }
@@ -71,6 +83,7 @@ class Logger {
     message: string,
     data?: string, // Note: Pass JSON as string - use JSON.stringify() for objects
     context?: LogContext,
+    includeStack?: boolean,
   ) {
     // Only log to external services in production for errors and warnings
     if (!this.isProduction || (level !== 'error' && level !== 'warn')) return;
@@ -91,31 +104,51 @@ class Logger {
     }
   }
 
-  error(message: string, data?: string, context?: LogContext) {
+  error(
+    message: string,
+    data?: string,
+    context?: LogContext,
+    includeStack?: boolean,
+  ) {
     // Note: Pass JSON as string - use JSON.stringify() for objects
-    this.logToConsole('error', message, data, context);
-    this.logToExternal('error', message, data, context);
+    this.logToConsole('error', message, data, context, includeStack);
+    this.logToExternal('error', message, data, context, includeStack);
   }
 
-  warn(message: string, data?: string, context?: LogContext) {
+  warn(
+    message: string,
+    data?: string,
+    context?: LogContext,
+    includeStack?: boolean,
+  ) {
     // Note: Pass JSON as string - use JSON.stringify() for objects
-    this.logToConsole('warn', message, data, context);
-    this.logToExternal('warn', message, data, context);
+    this.logToConsole('warn', message, data, context, includeStack);
+    this.logToExternal('warn', message, data, context, includeStack);
   }
 
-  info(message: string, data?: string, context?: LogContext) {
+  info(
+    message: string,
+    data?: string,
+    context?: LogContext,
+    includeStack?: boolean,
+  ) {
     // Note: Pass JSON as string - use JSON.stringify() for objects
     // Only log to console in development for info level
     if (this.isDevelopment) {
-      this.logToConsole('info', message, data, context);
+      this.logToConsole('info', message, data, context, includeStack);
     }
   }
 
-  debug(message: string, data?: string, context?: LogContext) {
+  debug(
+    message: string,
+    data?: string,
+    context?: LogContext,
+    includeStack?: boolean,
+  ) {
     // Note: Pass JSON as string - use JSON.stringify() for objects
     // Only log in development for debug level
     if (this.isDevelopment) {
-      this.logToConsole('debug', message, data, context);
+      this.logToConsole('debug', message, data, context, includeStack);
     }
   }
 
@@ -156,6 +189,7 @@ class Logger {
     endpoint: string,
     error: Error | unknown,
     context?: LogContext,
+    includeStack: boolean = true, // Default to true for API errors
   ) {
     const errorData =
       error instanceof Error
@@ -166,12 +200,17 @@ class Logger {
           })
         : JSON.stringify({ error: String(error) });
 
-    this.error(`API Error: ${method} ${endpoint}`, errorData, {
-      method,
-      endpoint,
-      errorType: error instanceof Error ? error.constructor.name : 'Unknown',
-      ...context,
-    });
+    this.error(
+      `API Error: ${method} ${endpoint}`,
+      errorData,
+      {
+        method,
+        endpoint,
+        errorType: error instanceof Error ? error.constructor.name : 'Unknown',
+        ...context,
+      },
+      includeStack,
+    );
   }
 }
 
