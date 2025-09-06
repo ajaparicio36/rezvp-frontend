@@ -9,6 +9,7 @@ A modern Next.js application with robust API handling, comprehensive error manag
 - **🛡️ Middleware Protection** - Automatic route protection and token refresh
 - **🛡️ Error Management** - Comprehensive error handling with custom error classes and user-friendly messages
 - **📝 Structured Logging** - Advanced logging system with different levels and external service integration
+- **👤 User Context Management** - Centralized user and business data management with automatic fetching
 - **🎨 Type Safety** - Full TypeScript support with proper type definitions
 - **⚡ Next.js 14** - Latest Next.js with App Router and server components
 
@@ -17,6 +18,7 @@ A modern Next.js application with robust API handling, comprehensive error manag
 - **Framework:** Next.js 14 (App Router)
 - **Language:** TypeScript
 - **Authentication:** Token-based with automatic refresh
+- **State Management:** React Context for user data
 - **Cookies:** Secure HTTP-only cookies
 - **HTTP Client:** Fetch API with custom wrapper
 - **Logging:** Custom logger with console and external service support
@@ -25,12 +27,16 @@ A modern Next.js application with robust API handling, comprehensive error manag
 
 ```
 src/
+├── contexts/
+│   └── UserContext.tsx        # User and business data context provider
 ├── hooks/
-│   └── useApiCall.ts          # Custom API call hook with token management
+│   ├── useApiCall.ts          # Custom API call hook with token management
+│   └── useUser.ts             # User context hooks for components
 ├── middleware.ts              # Route protection and token refresh
 ├── types/
 │   ├── api.ts                 # API response types
-│   └── errors.ts              # Custom error classes
+│   ├── errors.ts              # Custom error classes
+│   └── user.ts                # User and business type definitions
 └── utils/
     ├── api/
     │   ├── client.ts          # Client-side API utilities
@@ -123,6 +129,259 @@ ENABLE_DEBUG_MODE=false                # Enable additional debug information
 ```
 
 ## 📚 Usage Examples
+
+### User Context & Data Management
+
+The application provides a comprehensive user context system for managing user and business data across your app.
+
+#### Setting Up the Provider
+
+First, wrap your app with the UserProvider:
+
+```typescript
+// app/layout.tsx
+import { UserProvider } from '@/contexts/UserContext';
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <UserProvider>
+          {children}
+        </UserProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+#### Using User Data in Components
+
+```typescript
+import { useUser, useBusiness, useUserData } from '@/hooks/useUser';
+
+// For user-specific data
+function UserProfile() {
+  const {
+    user,
+    loading,
+    error,
+    isAuthenticated,
+    fullName,
+    displayName,
+    refreshUser
+  } = useUser();
+
+  if (loading) return <div>Loading user...</div>;
+  if (error) return <div>Error: {error}</div>;
+  if (!isAuthenticated) return <div>Please log in</div>;
+
+  return (
+    <div>
+      <h1>Welcome, {displayName}!</h1>
+      <p>Full name: {fullName}</p>
+      <p>Email: {user?.email}</p>
+      <button onClick={refreshUser}>Refresh Profile</button>
+    </div>
+  );
+}
+
+// For business-specific data
+function BusinessDashboard() {
+  const {
+    business,
+    loading,
+    error,
+    hasBusiness,
+    isVerified,
+    subscriptionStatus,
+    businessName,
+    refreshBusiness,
+  } = useBusiness();
+
+  if (loading) return <div>Loading business...</div>;
+  if (error) return <div>Error: {error}</div>;
+  if (!hasBusiness) return <div>No business profile found</div>;
+
+  return (
+    <div>
+      <h1>{businessName}</h1>
+      <p>Status: {subscriptionStatus}</p>
+      <p>Verified: {isVerified ? 'Yes' : 'No'}</p>
+      <button onClick={refreshBusiness}>Refresh Business</button>
+    </div>
+  );
+}
+
+// For combined user and business data
+function OnboardingFlow() {
+  const {
+    user,
+    business,
+    loading,
+    isAuthenticated,
+    needsOnboarding,
+    refreshAll,
+  } = useUserData();
+
+  if (loading) return <div>Loading...</div>;
+  if (!isAuthenticated) return <div>Please authenticate</div>;
+
+  if (needsOnboarding) {
+    return (
+      <div>
+        <h2>Complete Your Setup</h2>
+        {!user && <p>Please complete your profile</p>}
+        {!business && <p>Please set up your business</p>}
+        <button onClick={refreshAll}>Check Again</button>
+      </div>
+    );
+  }
+
+  return <div>Setup complete! Welcome to the dashboard.</div>;
+}
+```
+
+#### Advanced Context Usage
+
+```typescript
+import { useUserContext } from '@/contexts/UserContext';
+
+function AdminPanel() {
+  const {
+    user,
+    business,
+    loading,
+    error,
+    refreshUser,
+    refreshBusiness,
+    refreshAll,
+    clearData
+  } = useUserContext();
+
+  const handleLogout = async () => {
+    // Clear all context data
+    clearData();
+
+    // Redirect to login
+    window.location.href = '/login';
+  };
+
+  const handleRefreshAll = async () => {
+    await refreshAll();
+    console.log('All data refreshed');
+  };
+
+  return (
+    <div>
+      <h1>Admin Panel</h1>
+
+      {/* User section */}
+      <section>
+        <h2>User Information</h2>
+        {user ? (
+          <div>
+            <p>Name: {user.firstName} {user.lastName}</p>
+            <p>Email: {user.email}</p>
+            <button onClick={refreshUser}>Refresh User</button>
+          </div>
+        ) : (
+          <p>No user data</p>
+        )}
+      </section>
+
+      {/* Business section */}
+      <section>
+        <h2>Business Information</h2>
+        {business ? (
+          <div>
+            <p>Business: {business.businessName}</p>
+            <p>Type: {business.businessType}</p>
+            <p>Verified: {business.isVerified ? 'Yes' : 'No'}</p>
+            <button onClick={refreshBusiness}>Refresh Business</button>
+          </div>
+        ) : (
+          <p>No business data</p>
+        )}
+      </section>
+
+      {/* Actions */}
+      <div>
+        <button onClick={handleRefreshAll} disabled={loading}>
+          {loading ? 'Refreshing...' : 'Refresh All Data'}
+        </button>
+        <button onClick={handleLogout}>Logout</button>
+      </div>
+
+      {error && <div style={{ color: 'red' }}>Error: {error}</div>}
+    </div>
+  );
+}
+```
+
+#### Conditional Rendering with User State
+
+```typescript
+import { useUserData } from '@/hooks/useUser';
+
+function AppContent() {
+  const { isAuthenticated, hasProfile, hasBusiness, needsOnboarding } = useUserData();
+
+  // Show loading state
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
+  // Redirect unauthenticated users
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  // Show onboarding for incomplete profiles
+  if (needsOnboarding) {
+    return <OnboardingFlow />;
+  }
+
+  // Show main app for complete profiles
+  return <MainDashboard />;
+}
+
+function NavigationMenu() {
+  const { user, business, hasBusiness } = useUserData();
+
+  return (
+    <nav>
+      <ul>
+        <li><Link href="/dashboard">Dashboard</Link></li>
+        <li><Link href="/profile">Profile</Link></li>
+
+        {/* Business-specific navigation */}
+        {hasBusiness && (
+          <>
+            <li><Link href="/business">Business Settings</Link></li>
+            <li><Link href="/business/profile">Business Profile</Link></li>
+          </>
+        )}
+
+        {/* Admin navigation for verified businesses */}
+        {business?.isVerified && (
+          <li><Link href="/admin">Admin Panel</Link></li>
+        )}
+      </ul>
+
+      {/* User info */}
+      <div>
+        Welcome, {user?.firstName}
+        {hasBusiness && <span> | {business?.businessName}</span>}
+      </div>
+    </nav>
+  );
+}
+```
 
 ### Authentication Flow
 
@@ -335,7 +594,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👨‍💻 Author
 
-**Antonio Aparicio**
+**AJ Aparicio**
 
 - GitHub: [@ajaparicio36](https://github.com/ajaparicio36)
 
