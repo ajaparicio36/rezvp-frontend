@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ApiResponse, ValidationIssue } from '@/types/api';
+import { ValidationIssue, NestJSError } from '@/types/api';
 import { AppError } from '@/types/errors';
 import { logger } from '@/utils/logger';
 
@@ -21,7 +21,7 @@ interface ValidationError {
 export function createErrorResponse(
   error: unknown,
   context?: ErrorContext,
-): NextResponse<ApiResponse> {
+): NextResponse<NestJSError> {
   // Log the error with context and stack trace
   logger.apiError(
     context?.method || 'UNKNOWN',
@@ -37,12 +37,9 @@ export function createErrorResponse(
   if (error instanceof AppError) {
     return NextResponse.json(
       {
-        success: false,
-        error: {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-        },
+        statusCode: error.statusCode,
+        message: error.message,
+        error: error.code || getErrorTypeFromStatus(error.statusCode),
       },
       { status: error.statusCode },
     );
@@ -50,17 +47,11 @@ export function createErrorResponse(
 
   // Handle validation errors from libraries like Zod
   if (error && typeof error === 'object' && 'issues' in error) {
-    const validationError = error as ValidationError;
     return NextResponse.json(
       {
-        success: false,
-        error: {
-          message: 'Validation failed',
-          code: 'VALIDATION_ERROR',
-          details: {
-            issues: validationError.issues,
-          },
-        },
+        statusCode: 400,
+        message: 'Validation failed',
+        error: 'Bad Request',
       },
       { status: 400 },
     );
@@ -73,11 +64,9 @@ export function createErrorResponse(
     if (dbError.code === 'P2002') {
       return NextResponse.json(
         {
-          success: false,
-          error: {
-            message: 'A record with this information already exists',
-            code: 'DUPLICATE_ENTRY',
-          },
+          statusCode: 409,
+          message: 'A record with this information already exists',
+          error: 'Conflict',
         },
         { status: 409 },
       );
@@ -86,18 +75,16 @@ export function createErrorResponse(
 
   // Handle generic errors
   const message =
-    error instanceof Error ? error.message : 'An unexpected error occurred';
+    error instanceof Error ? error.message : 'Internal server error';
 
   return NextResponse.json(
     {
-      success: false,
-      error: {
-        message:
-          process.env.NODE_ENV === 'development'
-            ? message
-            : 'Internal server error',
-        code: 'INTERNAL_ERROR',
-      },
+      statusCode: 500,
+      message:
+        process.env.NODE_ENV === 'development'
+          ? message
+          : 'Internal server error',
+      error: 'Internal Server Error',
     },
     { status: 500 },
   );
@@ -106,7 +93,7 @@ export function createErrorResponse(
 export function createSuccessResponse<T>(
   data: T,
   context?: ErrorContext,
-): NextResponse<ApiResponse<T>> {
+): NextResponse<T> {
   // Log successful response
   if (context) {
     logger.apiResponse(
@@ -118,8 +105,20 @@ export function createSuccessResponse<T>(
     );
   }
 
-  return NextResponse.json({
-    success: true,
-    data,
-  });
+  // Return data directly like NestJS does
+  return NextResponse.json(data);
+}
+
+function getErrorTypeFromStatus(statusCode: number): string {
+  const errorTypes: Record<number, string> = {
+    400: 'Bad Request',
+    401: 'Unauthorized',
+    403: 'Forbidden',
+    404: 'Not Found',
+    409: 'Conflict',
+    422: 'Unprocessable Entity',
+    500: 'Internal Server Error',
+  };
+
+  return errorTypes[statusCode] || 'Unknown Error';
 }

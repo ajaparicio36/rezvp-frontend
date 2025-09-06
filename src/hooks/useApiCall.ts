@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { ApiResponse } from '@/types/api';
+import { ApiResponse, NestJSError } from '@/types/api';
 import { parseErrorMessage } from '@/utils/api/errorMessages';
 import { logger } from '@/utils/logger';
 
@@ -27,15 +27,26 @@ export function useApiCall<T>() {
         ...options,
       });
 
-      const result: ApiResponse<T> = await response.json();
+      // Check if response is successful
+      if (response.ok) {
+        // NestJS returns data directly on success
+        const data: T = await response.json();
+        setData(data);
+        return {
+          success: true,
+          data,
+        };
+      } else {
+        // NestJS returns error object with statusCode, message, error
+        const errorResult: NestJSError = await response.json();
+        const errorMessage = parseErrorMessage(errorResult);
+        setError(errorMessage);
 
-      if (!result.success) {
-        setError(parseErrorMessage(result.error));
-        return result;
+        return {
+          success: false,
+          error: errorResult,
+        };
       }
-
-      setData(result.data || null);
-      return result;
     } catch (err) {
       const errorMessage = 'Network error occured';
       setError(errorMessage);
@@ -55,6 +66,7 @@ export function useApiCall<T>() {
       return {
         success: false,
         error: {
+          statusCode: 0,
           message: errorMessage,
         },
       };

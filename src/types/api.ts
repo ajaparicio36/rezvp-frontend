@@ -13,14 +13,18 @@ export interface ErrorDetails {
   [key: string]: string | number | boolean | ValidationIssue[] | undefined;
 }
 
+// NestJS returns data directly on success, not wrapped in ApiResponse
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
-  error?: {
-    message: string;
-    code?: string;
-    details?: ErrorDetails;
-  };
+  error?: NestJSError;
+}
+
+// NestJS error format
+export interface NestJSError {
+  statusCode: number;
+  message: string;
+  error?: string; // Error type like "Unauthorized", "Bad Request"
 }
 
 export interface ApiError {
