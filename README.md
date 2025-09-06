@@ -1,10 +1,12 @@
 # 🚀 NextJS API Hook + Logger
 
-A modern Next.js application with robust API handling, comprehensive error management, and structured logging capabilities.
+A modern Next.js application with robust API handling, comprehensive error management, structured logging capabilities, and automatic token management with cookie-based authentication.
 
 ## ✨ Features
 
-- **🔄 Smart API Calls** - Custom hook for handling API requests with built-in loading states and error handling
+- **🔄 Smart API Calls** - Custom hook for handling API requests with automatic token refresh and retry logic
+- **🍪 Cookie Management** - Server-side cookie utilities for secure token storage
+- **🛡️ Middleware Protection** - Automatic route protection and token refresh
 - **🛡️ Error Management** - Comprehensive error handling with custom error classes and user-friendly messages
 - **📝 Structured Logging** - Advanced logging system with different levels and external service integration
 - **🎨 Type Safety** - Full TypeScript support with proper type definitions
@@ -14,8 +16,8 @@ A modern Next.js application with robust API handling, comprehensive error manag
 
 - **Framework:** Next.js 14 (App Router)
 - **Language:** TypeScript
-- **Styling:** (Add your styling solution)
-- **State Management:** React Hooks
+- **Authentication:** Token-based with automatic refresh
+- **Cookies:** Secure HTTP-only cookies
 - **HTTP Client:** Fetch API with custom wrapper
 - **Logging:** Custom logger with console and external service support
 
@@ -24,14 +26,18 @@ A modern Next.js application with robust API handling, comprehensive error manag
 ```
 src/
 ├── hooks/
-│   └── useApiCall.ts          # Custom API call hook
+│   └── useApiCall.ts          # Custom API call hook with token management
+├── middleware.ts              # Route protection and token refresh
 ├── types/
 │   ├── api.ts                 # API response types
 │   └── errors.ts              # Custom error classes
 └── utils/
     ├── api/
+    │   ├── client.ts          # Client-side API utilities
     │   ├── errorHandler.ts    # API error handling utilities
     │   └── errorMessages.ts   # User-friendly error messages
+    ├── auth.ts                # Authentication utilities
+    ├── cookies.ts             # Server-side cookie management
     └── logger.ts              # Structured logging system
 ```
 
@@ -95,23 +101,11 @@ Create a `.env.local` file in the root directory with the following variables:
 # Application Environment
 NODE_ENV=development                    # development | production | test
 
+# API Configuration
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001  # Your NestJS backend URL
+
 # Logging Configuration
 LOG_LEVEL=info                         # error | warn | info | debug
-
-# API Configuration
-NEXT_PUBLIC_API_URL=http://localhost:3000/api
-# Add your API base URL here
-
-# Database (if using)
-# DATABASE_URL=postgresql://user:password@localhost:5432/database
-
-# Authentication (if using)
-# NEXTAUTH_SECRET=your-secret-key
-# NEXTAUTH_URL=http://localhost:3000
-
-# External Services
-# SENTRY_DSN=your-sentry-dsn            # For error tracking
-# LOGROCKET_APP_ID=your-logrocket-id    # For session recording
 ```
 
 ### Optional Variables
@@ -130,21 +124,75 @@ ENABLE_DEBUG_MODE=false                # Enable additional debug information
 
 ## 📚 Usage Examples
 
-### Using the API Call Hook
+### Authentication Flow
+
+```typescript
+import { useApiCall } from '@/hooks/useApiCall';
+import { saveAuthTokens, clearUserSession } from '@/utils/auth';
+
+function LoginComponent() {
+  const { call, loading, error } = useApiCall();
+
+  const handleLogin = async (email: string, password: string) => {
+    const result = await call('/auth/signin', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (result.success) {
+      // Tokens are automatically saved to secure cookies
+      await saveAuthTokens({
+        access_token: result.data.access_token,
+        refresh_token: result.data.refresh_token,
+        userId: result.data.userId,
+      });
+
+      window.location.href = '/dashboard';
+    }
+  };
+
+  const handleLogout = async () => {
+    await call('/auth/signout', { method: 'POST' });
+    await clearUserSession();
+  };
+
+  return (
+    <div>
+      {loading && <p>Loading...</p>}
+      {error && <p>Error: {error}</p>}
+      {/* Your login form */}
+    </div>
+  );
+}
+```
+
+### Protected API Calls
+
+The `useApiCall` hook automatically handles authentication:
 
 ```typescript
 import { useApiCall } from '@/hooks/useApiCall';
 
-function MyComponent() {
+function UserProfile() {
   const { call, loading, error, data } = useApiCall<UserData>();
 
-  const fetchUser = async () => {
-    const result = await call('/api/users/1', {
-      method: 'GET',
+  const fetchUserProfile = async () => {
+    // Token is automatically included and refreshed if needed
+    const result = await call('/api/profile');
+
+    if (result.success) {
+      console.log('Profile:', result.data);
+    }
+  };
+
+  const updateProfile = async (profileData: Partial<UserData>) => {
+    const result = await call('/api/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profileData),
     });
 
     if (result.success) {
-      console.log('User data:', result.data);
+      console.log('Profile updated');
     }
   };
 
@@ -152,77 +200,119 @@ function MyComponent() {
     <div>
       {loading && <p>Loading...</p>}
       {error && <p>Error: {error}</p>}
-      {data && <p>Welcome, {data.name}!</p>}
-      <button onClick={fetchUser}>Fetch User</button>
+      {data && <div>Welcome, {data.name}!</div>}
     </div>
   );
 }
 ```
 
-### Creating API Routes with Error Handling
+### Cookie Management
+
+Server-side cookie operations (use in server components or API routes):
 
 ```typescript
-// app/api/example/route.ts
-import { NextRequest } from 'next/server';
 import {
-  createErrorResponse,
-  createSuccessResponse,
-} from '@/utils/api/errorHandler';
-import { ValidationError } from '@/types/errors';
+  getAccessToken,
+  setAuthTokens,
+  clearAuthTokens,
+  hasValidTokens,
+} from '@/utils/cookies';
 
-export async function GET(request: NextRequest) {
-  try {
-    // Your API logic here
-    const data = { message: 'Hello World' };
+// In a server component or API route
+export async function GET() {
+  const accessToken = await getAccessToken();
+  const hasTokens = await hasValidTokens();
 
-    return createSuccessResponse(data, {
-      method: 'GET',
-      endpoint: '/api/example',
-    });
-  } catch (error) {
-    return createErrorResponse(error, {
-      method: 'GET',
-      endpoint: '/api/example',
-    });
+  if (!hasTokens) {
+    redirect('/login');
   }
+
+  // Use token for API calls
+  return Response.json({ authenticated: true });
+}
+
+// Save tokens after successful authentication
+await setAuthTokens(accessToken, refreshToken, userId);
+
+// Clear tokens on logout
+await clearAuthTokens();
+```
+
+## 🛡️ Middleware & Route Protection
+
+The application includes automatic middleware that:
+
+- **Protects Routes**: Redirects unauthenticated users from protected routes
+- **Refreshes Tokens**: Automatically refreshes expired access tokens
+- **Manages Redirects**: Redirects authenticated users away from auth pages
+
+### Protected Routes Configuration
+
+```typescript
+// In middleware.ts
+const PROTECTED_ROUTES = ['/dashboard', '/profile', '/settings'];
+const AUTH_ROUTES = ['/login', '/register', '/auth'];
+```
+
+### How It Works
+
+1. **Token Check**: Middleware checks for access and refresh tokens
+2. **Auto Refresh**: If access token is expired but refresh token exists, automatically refreshes
+3. **Route Protection**: Redirects unauthorized users to login
+4. **Auth Redirect**: Redirects already authenticated users away from login pages
+
+### Manual Token Refresh
+
+```typescript
+import { refreshAccessToken } from '@/utils/api/client';
+
+// Manually refresh token (usually handled automatically)
+const newToken = await refreshAccessToken();
+if (newToken) {
+  console.log('Token refreshed successfully');
+} else {
+  console.log('Refresh failed, redirect to login');
 }
 ```
 
-### Using the Logger
+## 🍪 Cookie Security
 
-```typescript
-import { logger } from '@/utils/logger';
+All authentication cookies are configured with:
 
-// Log different levels
-logger.info('Application started');
-logger.warn('This is a warning');
-logger.error('An error occurred', JSON.stringify(errorData));
-
-// API-specific logging
-logger.apiRequest('GET', '/api/users');
-logger.apiResponse('GET', '/api/users', 200, 150);
-logger.apiError('POST', '/api/users', error);
-```
+- **HttpOnly**: Cannot be accessed via JavaScript
+- **Secure**: Only sent over HTTPS in production
+- **SameSite**: CSRF protection
+- **Proper Expiration**: Access tokens (1 hour), Refresh tokens (7 days)
 
 ## 🔍 Error Handling
 
 The application includes comprehensive error handling:
 
-- **Custom Error Classes**: `AppError`, `ValidationError`, `NotFoundError`, etc.
-- **User-Friendly Messages**: Automatic conversion of technical errors to user-friendly messages
-- **Structured Logging**: All errors are logged with context and stack traces
-- **Type Safety**: Full TypeScript support for error handling
+- **Automatic Retry**: Failed requests due to expired tokens are automatically retried
+- **User-Friendly Messages**: Technical errors converted to readable messages
+- **Session Management**: Automatic logout on authentication failures
+- **Structured Logging**: All errors logged with context
 
 ## 📊 Logging
 
-The logging system supports:
+API calls are automatically logged:
 
-- **Multiple Levels**: Error, Warn, Info, Debug
-- **Context**: Additional metadata for each log entry
-- **Environment-Aware**: Different behavior in development vs production
-- **External Integration**: Ready for services like Sentry, LogRocket, etc.
+```typescript
+// Automatic logging in useApiCall
+logger.apiRequest('POST', '/api/users');
+logger.apiResponse('POST', '/api/users', 201, 150);
+logger.apiError('POST', '/api/users', error);
+```
 
 ## 🚀 Deployment
+
+### Environment Variables for Production
+
+```bash
+NODE_ENV=production
+NEXT_PUBLIC_API_BASE_URL=https://your-api.com
+LOG_LEVEL=warn
+```
 
 ### Vercel (Recommended)
 
@@ -230,10 +320,6 @@ The logging system supports:
 2. Connect your repository to [Vercel](https://vercel.com)
 3. Add your environment variables in the Vercel dashboard
 4. Deploy!
-
-### Other Platforms
-
-This Next.js application can be deployed to any platform that supports Node.js. Check the [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 ## 🤝 Contributing
 
@@ -255,4 +341,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-Built with ❤️ using Next.js and TypeScript
+Built with ❤️ using Next.js, TypeScript, and secure authentication patterns
