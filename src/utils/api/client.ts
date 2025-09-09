@@ -1,29 +1,30 @@
 'use client';
+import { getRefreshToken, setAuthTokens } from '../cookies';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
-export async function getAccessTokenFromCookie(): Promise<string | null> {
-  try {
-    // Get token from document.cookie in client-side
-    const cookies = document.cookie.split(';');
-    const accessTokenCookie = cookies.find((cookie) =>
-      cookie.trim().startsWith('access_token='),
-    );
+// export async function getAccessTokenFromCookie(): Promise<string | null> {
+//   try {
+//     // Get token from document.cookie in client-side
+//     const cookies = document.cookie.split(';');
+//     const accessTokenCookie = cookies.find((cookie) =>
+//       cookie.trim().startsWith('access_token='),
+//     );
 
-    if (accessTokenCookie) {
-      return accessTokenCookie.split('=')[1];
-    }
-    return null;
-  } catch (error) {
-    console.error('Error getting access token from cookie:', error);
-    return null;
-  }
-}
+//     if (accessTokenCookie) {
+//       return accessTokenCookie.split('=')[1];
+//     }
+//     return null;
+//   } catch (error) {
+//     console.error('Error getting access token from cookie:', error);
+//     return null;
+//   }
+// }
 
 export async function refreshAccessToken(): Promise<string | null> {
   try {
-    const refreshToken = getRefreshTokenFromCookie();
+    const refreshToken = await getRefreshToken();
 
     if (!refreshToken) {
       return null;
@@ -59,29 +60,11 @@ export async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
-function getRefreshTokenFromCookie(): string | null {
-  try {
-    const cookies = document.cookie.split(';');
-    const refreshTokenCookie = cookies.find((cookie) =>
-      cookie.trim().startsWith('refresh_token='),
-    );
-
-    if (refreshTokenCookie) {
-      return refreshTokenCookie.split('=')[1];
-    }
-    return null;
-  } catch (error) {
-    console.error('Error getting refresh token from cookie:', error);
-    return null;
-  }
-}
-
 async function updateAuthCookies(
   accessToken: string,
   refreshToken: string,
   userId: string,
 ) {
-  // Call server action to update cookies
-  const { setAuthTokens } = await import('@/utils/cookies');
+  // Call server action to update cookies}
   await setAuthTokens(accessToken, refreshToken, userId);
 }

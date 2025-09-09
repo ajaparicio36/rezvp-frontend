@@ -3,10 +3,8 @@ import { useState } from 'react';
 import { ApiResponse, NestJSError } from '@/types/api';
 import { parseErrorMessage } from '@/utils/api/errorMessages';
 import { logger } from '@/utils/logger';
-import {
-  getAccessTokenFromCookie,
-  refreshAccessToken,
-} from '@/utils/api/client';
+import { refreshAccessToken } from '@/utils/api/client';
+import { getAccessToken } from '@/utils/cookies';
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
@@ -29,7 +27,7 @@ export function useApiCall<T>() {
 
     try {
       // Get access token from cookie
-      const accessToken = await getAccessTokenFromCookie();
+      const accessToken = await getAccessToken();
 
       const isFormData = options?.body instanceof FormData;
 
